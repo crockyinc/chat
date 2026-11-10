@@ -1,6 +1,6 @@
 import express from 'express';
 import { config, lanAddresses } from '../config.js';
-import { authenticate, createSessionToken, timingSafeEqual } from '../security.js';
+import { authenticate, sessionCookie, timingSafeEqual } from '../security.js';
 import { isOnline } from '../presence.js';
 
 const SESSION_MAX_AGE = 90 * 24 * 60 * 60; // seconds
@@ -47,11 +47,8 @@ export function createAuthRouter({ db }) {
     if (name.length > 60) return res.status(400).json({ error: 'Display name is too long (max 60 chars)' });
 
     const user = db.upsertUser({ deviceId, displayName: name });
-    const token = createSessionToken(deviceId);
-    res.setHeader(
-      'Set-Cookie',
-      `lm_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}`,
-    );
+    const { header } = sessionCookie(deviceId, SESSION_MAX_AGE);
+    res.setHeader('Set-Cookie', header);
     res.json({ deviceId, displayName: user.displayName });
   });
 

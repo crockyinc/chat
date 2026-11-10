@@ -26,13 +26,31 @@ export async function createApp({ dbFile = config.dbFile, seed = null } = {}) {
 
   const app = express();
   const server = http.createServer(app);
+  // Same-origin by default. When a static UI on another site is allowlisted
+  // (ALLOWED_ORIGINS), reflect just those origins so credentials still work.
+  const corsOrigin = config.allowedOrigins.length ? config.allowedOrigins : true;
   const io = new SocketServer(server, {
     maxHttpBufferSize: 2 * 1024 * 1024,
-    cors: { origin: true, credentials: true },
+    cors: { origin: corsOrigin, credentials: true },
   });
 
   if (config.trustProxy) app.set('trust proxy', 1);
   app.disable('x-powered-by');
+
+  if (config.allowedOrigins.length) {
+    app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      if (origin && config.allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+      }
+      if (req.method === 'OPTIONS') return res.sendStatus(204);
+      next();
+    });
+  }
 
   app.use(express.json({ limit: config.maxJsonBytes }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));

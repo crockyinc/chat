@@ -1,5 +1,6 @@
 import { icon } from './icons.js';
 import { avatarColor, initialsFor, shortSerial } from '../lib/device.js';
+import { absoluteUrl, absoluteHtmlUrls } from '../lib/backend.js';
 
 /**
  * Message rendering.
@@ -69,9 +70,9 @@ function imageBubble(message, { mine }) {
     .map((att, index) => {
       const ratio = att.width && att.height ? att.width / att.height : null;
       const style = ratio ? `aspect-ratio:${ratio.toFixed(3)}` : '';
-      return `<img class="msg-image ${mine ? 'outgoing' : ''}" src="${escapeHtml(att.url)}" alt="${escapeHtml(
+      return `<img class="msg-image ${mine ? 'outgoing' : ''}" src="${escapeHtml(absoluteUrl(att.url))}" alt="${escapeHtml(
         att.filename || 'Shared image',
-      )}" loading="lazy" data-lightbox="${escapeHtml(att.url)}" data-filename="${escapeHtml(
+      )}" loading="lazy" data-lightbox="${escapeHtml(absoluteUrl(att.url))}" data-filename="${escapeHtml(
         att.filename || 'image',
       )}" style="${style}" ${mine && index === attachments.length - 1 ? 'data-last="1"' : ''} />`;
     })
@@ -105,7 +106,7 @@ export function renderMessage(message, { myId, previous = null, showDay = true }
 
   const isImageOnly = message.kind === 'image' || (!stripTags(message.body).trim() && attachments.length);
   const bubbleClass = `bubble ${mine ? 'out' : 'in'}`;
-  const bodyHtml = message.body ? `<div class="rich">${message.body}</div>` : '';
+  const bodyHtml = message.body ? `<div class="rich">${absoluteHtmlUrls(message.body)}</div>` : '';
 
   const content = isImageOnly
     ? `<div class="msg-images relative" data-message-id="${message.id}">${imageBubble(message, { mine })}</div>`

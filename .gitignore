@@ -17,3 +17,9 @@ public/js/app.js.map
 *.log
 .vscode/
 .idea/
+
+# Cloudflare Pages static bundle
+dist/
+
+# wrangler local state
+.wrangler/

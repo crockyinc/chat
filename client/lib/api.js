@@ -1,3 +1,5 @@
+import { apiUrl } from './backend.js';
+
 /** Thin wrapper over fetch: JSON in, JSON out, cookies included. */
 
 class ApiError extends Error {
@@ -23,7 +25,7 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
 
   let response;
   try {
-    response = await fetch(path, options);
+    response = await fetch(apiUrl(path), options);
   } catch (err) {
     throw new ApiError('Cannot reach the server. Is it still running?', 0, null);
   }

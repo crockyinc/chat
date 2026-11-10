@@ -1,0 +1,9 @@
+# Cloudflare Pages configuration
+#
+# `npm run build:pages` writes a self-contained static bundle to ./dist.
+# Pages then uploads it as static assets — no Worker runtime, no SQLite, no
+# uploads directory. See docs/DEPLOY-CLOUDFLARE.md for the full picture and for
+# the hybrid setup that points this UI at a Node backend.
+name = "lan-messenger"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "./dist"

@@ -30,6 +30,21 @@ export const config = {
   roomName: env.ROOM_NAME || 'Local LAN Chat',
   /** Trust X-Forwarded-For (only needed behind a proxy). */
   trustProxy: env.TRUST_PROXY === '1',
+  /**
+   * Comma-separated origins allowed to call the API/socket from another site,
+   * e.g. "https://lan-messenger.pages.dev". Needed only for the hybrid setup
+   * where a static UI on Cloudflare Pages talks to this Node backend.
+   * Default (empty) = same-origin only, which is the normal LAN case.
+   */
+  allowedOrigins: (env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean),
+  /**
+   * Cross-site cookies need SameSite=None; Secure. Set COOKIE_SAMESITE=none when
+   * the UI is hosted on a different site than the backend (HTTPS required).
+   */
+  cookieSameSite: (env.COOKIE_SAMESITE || 'lax').toLowerCase() === 'none' ? 'None' : 'Lax',
 };
 
 export const paths = {

@@ -14,6 +14,7 @@ import {
 } from './lib/device.js';
 import { mountIcons, icon } from './ui/icons.js';
 import { createToolbar, setToastHandler } from './editor/toolbar.js';
+import { isRemoteBackend } from './lib/backend.js';
 import { createChatView } from './ui/chatView.js';
 import { createComposer } from './ui/composer.js';
 import { createEditorModal } from './ui/editorModal.js';
@@ -223,13 +224,56 @@ function setConnection(status) {
   if (status === 'unauthorized') reconnectSession();
 }
 
+/**
+ * Re-establishes a session after the socket is rejected (usually an expired
+ * cookie). Bounded on purpose: a rejected cookie in the cross-site hybrid setup
+ * must not turn into an endless identify/reconnect storm against the backend.
+ */
+let reconnectAttempts = 0;
+let reconnecting = false;
+
+/**
+ * Re-establishes a session after the socket is rejected (usually an expired or
+ * unstored cookie). Bounded on purpose: if the browser refuses to keep the
+ * session cookie — third-party cookie blocking, a missing SameSite=None/Secure
+ * pair in the hybrid setup — this must not become an endless reconnect storm.
+ * The counter is only reset once a socket actually completes its handshake
+ * (`hello`), never by a successful /identify, because that is exactly the state
+ * that loops.
+ */
+const MAX_RECONNECT_ATTEMPTS = 3;
+
 async function reconnectSession() {
+  if (reconnecting) return;
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    setConnection('offline');
+    toast(
+      isRemoteBackend()
+        ? 'Signed in, but this browser will not keep the session cookie. Serve the backend over HTTPS with COOKIE_SAMESITE=none and allow this origin in ALLOWED_ORIGINS.'
+        : 'Session expired — reload the page.',
+      'error',
+    );
+    // Stop Socket.io from retrying forever; the user needs to fix the session.
+    try {
+      socket?.socket?.io?.opts && (socket.socket.io.opts.reconnection = false);
+      socket?.socket?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  reconnecting = true;
+  reconnectAttempts += 1;
+  // Back off: 1s, 3s, 7s.
+  await new Promise((resolve) => setTimeout(resolve, 1000 * (2 ** reconnectAttempts - 1)));
   try {
     await identify({ displayName: myProfile.displayName, password: '' });
     socket?.refresh();
     loadHistory({ initial: true });
   } catch {
-    toast('Session expired — reload the page', 'error');
+    toast('Could not restore the session', 'error');
+  } finally {
+    reconnecting = false;
   }
 }
 
@@ -310,6 +354,7 @@ function connectSocket() {
   socket = createSocket({ onStatus: setConnection });
 
   socket.on('hello', (payload) => {
+    reconnectAttempts = 0;
     if (payload?.me?.displayName !== undefined && !myProfile.displayName && payload.me.displayName) {
       myProfile.displayName = payload.me.displayName;
       setDisplayName(myProfile.displayName);

@@ -5,6 +5,7 @@ import { icon, mountIcons } from './icons.js';
 import { findSelectedCell } from '../editor/extensions/TableCellStyles.js';
 import { insertMatrix, parseMatrixFromHtml } from '../editor/extensions/SpreadsheetPaste.js';
 import { containsTable, parseDelimitedText, normalizeSpreadsheetHtml } from '../editor/clipboard.js';
+import { absoluteUrl } from '../lib/backend.js';
 
 /**
  * Full-screen composer. Same document as the small composer (parents sync the
@@ -159,7 +160,9 @@ export function createEditorModal({ onSend, onUpload, onToast, getInitialHtml, o
       const result = await onUpload(images);
       const attachments = result.attachments || [];
       if (!attachments.length) return;
-      const html = attachments.map((att) => `<p><img src="${att.url}" alt="${escapeAttr(att.filename || '')}" /></p>`).join('');
+      const html = attachments
+        .map((att) => `<p><img src="${absoluteUrl(att.url)}" alt="${escapeAttr(att.filename || '')}" /></p>`)
+        .join('');
       editor.chain().focus().insertContent(html).run();
     } catch (err) {
       onToast?.(err.message || 'Upload failed', 'error');

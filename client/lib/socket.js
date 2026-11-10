@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
+import { backendOrigin } from './backend.js';
 
 /**
  * Socket.io client with automatic reconnection and a small event bus.
  * Everything travels over the same origin — no external relay, ever.
  */
 export function createSocket({ onStatus } = {}) {
-  const socket = io({
+  const socket = io(backendOrigin() || undefined, {
     withCredentials: true,
     transports: ['websocket', 'polling'],
     reconnection: true,

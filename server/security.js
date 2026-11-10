@@ -30,6 +30,20 @@ export function verifyAttachmentSignature(id, exp, sig) {
 
 /* ---------------------------------------------------------------- session */
 
+/** Cookie attributes for the session token (SameSite=None for cross-site setups). */
+export function sessionCookie(deviceId, maxAgeSeconds = 90 * 24 * 60 * 60) {
+  const token = createSessionToken(deviceId, maxAgeSeconds);
+  const parts = [
+    `lm_session=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    `SameSite=${config.cookieSameSite}`,
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (config.cookieSameSite === 'None') parts.push('Secure');
+  return { token, header: parts.join('; ') };
+}
+
 export function createSessionToken(deviceId, ttlSeconds = 60 * 60 * 24 * 90) {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   return `${deviceId}.${exp}.${hmac(`session:${deviceId}:${exp}`)}`;
