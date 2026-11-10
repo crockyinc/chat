@@ -69,6 +69,7 @@ npm run build    # production bundle
 | `HOST`              | `0.0.0.0`            | Bind address (all interfaces, so the LAN can reach it) |
 | `ROOM_NAME`         | `Local LAN Chat`     | Title shown in the sidebar                           |
 | `ROOM_PASSWORD`     | *(empty)*            | Require a shared password before joining             |
+| `SEND_PASSWORD`     | `QW4hd`              | Password required for every message (empty = off)    |
 | `DATA_DIR`          | `./data`             | Where the SQLite database and install secret live    |
 | `UPLOADS_DIR`       | `./uploads`          | Where images are stored                              |
 | `DB_FILE`           | `$DATA_DIR/lan-messenger.db` | Database path                                 |
@@ -125,6 +126,24 @@ Insert a table with any number of rows/columns, then:
 * `Ctrl/Cmd+Shift+V` pastes as plain text when you do *not* want a table.
 * Formatting can be round-tripped through the server: cell styles are stored both as inline CSS and
   as `data-cell-style` JSON, which is on the sanitiser whitelist.
+
+### Send password
+
+Every send is password protected. Clicking **Send** (or pressing Enter) opens a password prompt;
+the message is only stored if the password is correct, and a wrong password keeps your draft so you
+can retry.
+
+* Default password: **`QW4hd`** — change it with `SEND_PASSWORD`
+* Enforced **server-side**: the password travels with the message and is verified before anything is
+  written, so a modified client or a direct socket/API call cannot bypass it
+* Cancel sends nothing; images are uploaded once and reused across retries
+* Wrong attempts reset on success; `SEND_PASSWORD_MAX_ATTEMPTS` exists as a hook for stricter
+  policies, and per-socket rate limiting (20 msgs / 10 s) still applies
+* Disable the prompt entirely with `SEND_PASSWORD=` (empty)
+
+```bash
+SEND_PASSWORD='my-team-secret' npm start
+```
 
 ### Images
 * Drag & drop onto the composer, `Ctrl+V` a screenshot, or use the attach button (up to 6 at once).
@@ -196,11 +215,14 @@ Delete the database and the uploads folder to start from scratch.
 ## 4. Tests
 
 ```
-npm test        # 13 server tests: identity, sanitisation, broadcast, uploads/signing,
-                # upload rejection, delete permissions, presence, pagination, export, auth
-npm run test:ui # 10 browser tests (jsdom): boots the real bundle against a real server,
-                # joins, receives live messages, renders Excel tables, sends, formats,
-                # spreadsheet header selection + cell styling + real Excel paste
+npm test        # 16 server tests: identity, sanitisation, broadcast, uploads/signing,
+                # upload rejection, delete permissions, presence, pagination, export, auth,
+                # and the send-password gate (missing / wrong / correct, REST + socket)
+npm run test:ui # 13 browser tests (jsdom): boots the real bundle against a real server,
+                # joins, receives live messages, renders Excel tables, formats,
+                # spreadsheet header selection + cell styling + real Excel paste, and the
+                # password prompt (opens on Send, wrong password rejected, cancel keeps the
+                # draft, correct password sends)
 ```
 
 ---

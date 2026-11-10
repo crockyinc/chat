@@ -90,6 +90,16 @@ export function authenticate(req) {
   return null;
 }
 
+/**
+ * Compares a submitted send password with the configured one in constant time.
+ * Returns true when no password is configured (feature disabled).
+ */
+export function verifySendPassword(submitted) {
+  if (!config.sendPassword) return true;
+  if (typeof submitted !== 'string' || !submitted) return false;
+  return timingSafeEqual(config.sendPassword, submitted);
+}
+
 /* ----------------------------------------------------------- sanitisation */
 
 const ALIGN = ['left', 'center', 'right', 'justify'];

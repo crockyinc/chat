@@ -64,7 +64,9 @@ export function attachRealtime({ io, db, messages, roomName }) {
       } catch (err) {
         const status = err.status || 400;
         reply({ ok: false, clientId: payload?.clientId, error: err.message, status });
-        socket.emit('server:error', { message: err.message });
+        // A wrong send password is handled by the password dialog itself; the
+        // dialog shows the error, so don't also raise a global toast.
+        if (status !== 403) socket.emit('server:error', { message: err.message });
       }
     });
 

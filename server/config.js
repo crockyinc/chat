@@ -27,6 +27,13 @@ export const config = {
   retentionDays: Number(env.RETENTION_DAYS || 0),
   /** Optional shared room password. Empty string = open LAN mode. */
   roomPassword: env.ROOM_PASSWORD || '',
+  /**
+   * Password that must accompany every message. Enforced on the server, so a
+   * tampered client cannot bypass it. Empty string disables the prompt.
+   */
+  sendPassword: env.SEND_PASSWORD ?? 'QW4hd',
+  /** How many wrong password attempts a device gets per minute. */
+  sendPasswordMaxAttempts: Number(env.SEND_PASSWORD_MAX_ATTEMPTS || 8),
   roomName: env.ROOM_NAME || 'Local LAN Chat',
   /** Trust X-Forwarded-For (only needed behind a proxy). */
   trustProxy: env.TRUST_PROXY === '1',

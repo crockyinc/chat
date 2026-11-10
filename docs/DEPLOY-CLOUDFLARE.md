@@ -116,6 +116,8 @@ What those do:
   Requests from other origins get no CORS headers at all; nothing is wildcarded.
 * `COOKIE_SAMESITE=none` — sends the session cookie as `SameSite=None; Secure`, which is required
   for cross-site requests.
+* `SEND_PASSWORD` — the per-message password (default `QW4hd`). It is verified by the backend, so the
+  static UI cannot enforce it on its own: a Pages-only deployment has no backend to check it.
 
 **Important caveat:** Safari blocks third-party cookies and Chrome restricts them in some contexts.
 If the browser refuses to store the session cookie, the app now detects it, stops reconnecting, and

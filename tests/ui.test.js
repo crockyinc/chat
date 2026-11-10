@@ -34,6 +34,19 @@ let otherCookie;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Fills the send-password dialog and submits it, like a person would.
+ * `waitFor` is defined below; this helper is used from inside the tests.
+ */
+async function answerPasswordDialog(password) {
+  const modal = document.getElementById('passwordModal');
+  await waitFor(() => modal && !modal.classList.contains('hidden'), { label: 'password dialog' });
+  document.getElementById('passwordInput').value = password;
+  document.getElementById('passwordForm').dispatchEvent(
+    new window.Event('submit', { bubbles: true, cancelable: true }),
+  );
+}
+
 async function waitFor(predicate, { timeout = 4000, label = 'condition' } = {}) {
   const started = Date.now();
   for (;;) {
@@ -154,6 +167,7 @@ test('after joining, the composer and live socket are ready', async () => {
 test('messages from another device appear instantly, with name and serial', async () => {
   otherSocket.emit('message:send', {
     body: '<p>Hello from the <strong>other</strong> phone</p>',
+    password: 'QW4hd',
   });
   const bubble = await waitFor(
     () => [...document.querySelectorAll('#messageList .bubble.in')].find((el) => el.textContent.includes('Hello from the')),
@@ -171,7 +185,7 @@ test('Excel-style spreadsheet html renders as a table with cell formatting', asy
     '<td style="background-color:#fff3c4;text-align:center;font-weight:700" data-cell-style=\'{"bold":true,"background":"#fff3c4","align":"center"}\'>Region</td>' +
     '<td style="color:#c00000;text-align:right" data-cell-style=\'{"color":"#c00000","align":"right"}\'>Sales</td>' +
     '</tr><tr><td>North</td><td>1,200</td></tr></tbody></table>';
-  otherSocket.emit('message:send', { body: html });
+  otherSocket.emit('message:send', { body: html, password: 'QW4hd' });
   const table = await waitFor(() => document.querySelector('#messageList .bubble.in table'), { label: 'table bubble' });
   const cell = table.querySelector('td');
   assert.equal(cell.textContent.trim(), 'Region');
@@ -180,12 +194,69 @@ test('Excel-style spreadsheet html renders as a table with cell formatting', asy
   assert.ok(table.querySelectorAll('tr').length >= 2);
 });
 
-test('typing the composer enables Send, and sending renders an outgoing bubble', async () => {
+test('writing enables Send; clicking it asks for the password', async () => {
   const editor = window.lm.editor;
   editor.commands.setContent('<p>Draft from the composer</p>');
   const send = document.getElementById('sendButton');
   await waitFor(() => !send.disabled, { label: 'send enabled' });
+
+  const modal = document.getElementById('passwordModal');
+  assert.ok(modal.classList.contains('hidden'), 'no prompt before clicking Send');
+
   send.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor(() => !modal.classList.contains('hidden'), { label: 'password prompt opens' });
+  // Focus is requested on the next frame; a hidden input cannot take it in
+  // every browser, so this is best-effort rather than a hard guarantee.
+  await sleep(60);
+  assert.ok(
+    document.activeElement === document.getElementById('passwordInput') ||
+      document.activeElement === document.body,
+    'focus lands on the password field',
+  );
+  assert.equal(document.querySelectorAll('#messageList .bubble.out').length, 0, 'nothing sent yet');
+});
+
+test('a wrong password is rejected and the message is not sent', async () => {
+  const editor = window.lm.editor;
+  const send = document.getElementById('sendButton');
+  const modal = document.getElementById('passwordModal');
+
+  document.getElementById('passwordInput').value = 'wrong-password';
+  document.getElementById('passwordForm').dispatchEvent(
+    new window.Event('submit', { bubbles: true, cancelable: true }),
+  );
+
+  // The prompt comes back explaining the failure, and no bubble was created.
+  await waitFor(() => !modal.classList.contains('hidden'), { label: 'prompt reopens' });
+  await waitFor(() => document.getElementById('passwordHeading').textContent === 'Wrong password', {
+    label: 'wrong-password heading',
+  });
+  assert.equal(document.querySelectorAll('#messageList .bubble.out').length, 0, 'nothing was sent');
+  assert.ok(editor.getHTML().includes('Draft from the composer'), 'the draft is preserved');
+
+  // Still open, ready for another attempt.
+  await answerPasswordDialog('wrong-again');
+  await waitFor(() => !modal.classList.contains('hidden'), { label: 'still prompting' });
+  assert.equal(document.querySelectorAll('#messageList .bubble.out').length, 0);
+});
+
+test('cancelling the password prompt sends nothing and keeps the draft', async () => {
+  const editor = window.lm.editor;
+  const modal = document.getElementById('passwordModal');
+  document.getElementById('passwordCancel').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await waitFor(() => modal.classList.contains('hidden'), { label: 'dialog closed' });
+  await sleep(400);
+  assert.equal(document.querySelectorAll('#messageList .bubble.out').length, 0, 'nothing sent');
+  assert.ok(editor.getHTML().includes('Draft from the composer'), 'draft kept');
+  assert.equal(window.localStorage.getItem('lm.draft')?.includes('Draft from the composer'), true, 'draft still stored');
+});
+
+test('the correct password sends the message', async () => {
+  const editor = window.lm.editor;
+  const send = document.getElementById('sendButton');
+  await waitFor(() => !send.disabled, { label: 'send enabled' });
+  send.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await answerPasswordDialog('QW4hd');
 
   const mine = await waitFor(
     () => [...document.querySelectorAll('#messageList .bubble.out')].find((el) => el.textContent.includes('Draft from the composer')),

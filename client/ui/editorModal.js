@@ -6,6 +6,7 @@ import { findSelectedCell } from '../editor/extensions/TableCellStyles.js';
 import { insertMatrix, parseMatrixFromHtml } from '../editor/extensions/SpreadsheetPaste.js';
 import { containsTable, parseDelimitedText, normalizeSpreadsheetHtml } from '../editor/clipboard.js';
 import { absoluteUrl } from '../lib/backend.js';
+import { sendWithPasswordPrompt } from './passwordPrompt.js';
 
 /**
  * Full-screen composer. Same document as the small composer (parents sync the
@@ -127,23 +128,34 @@ export function createEditorModal({ onSend, onUpload, onToast, getInitialHtml, o
       onToast?.('Write something first');
       return;
     }
-    sending = true;
-    sendButton.disabled = true;
-    const original = sendButton.innerHTML;
-    sendButton.innerHTML = `<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>`;
+
+    let result;
     try {
-      await onSend?.(html);
-      editor.commands.clearContent(false);
-      close();
-      onToast?.('Sent');
+      result = await sendWithPasswordPrompt(async (password) => {
+        sending = true;
+        sendButton.disabled = true;
+        const original = sendButton.innerHTML;
+        sendButton.innerHTML = `<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>`;
+        try {
+          await onSend?.(html, password);
+        } finally {
+          sending = false;
+          sendButton.disabled = false;
+          sendButton.innerHTML = original;
+        }
+      });
     } catch (err) {
       onToast?.(err.message || 'Could not send', 'error');
-    } finally {
-      sending = false;
-      sendButton.disabled = false;
-      sendButton.innerHTML = original;
+      return;
     }
+
+    if (!result.sent) return; // cancelled: keep the draft open
+
+    editor.commands.clearContent(false);
+    close();
+    onToast?.('Sent');
   }
+
   sendButton?.addEventListener('click', submit);
 
   clearButton?.addEventListener('click', () => {

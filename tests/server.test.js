@@ -65,6 +65,11 @@ function connect(cookie) {
 const emitAck = (socket, event, payload) =>
   new Promise((resolve) => socket.emit(event, payload, resolve));
 
+/** Test helper: send a message with the configured send password. */
+const PASSWORD = 'QW4hd';
+const send = (socket, payload) =>
+  new Promise((resolve) => socket.emit('message:send', { password: PASSWORD, ...payload }, resolve));
+
 test('device identity is persistent and stored with a display name', async () => {
   const a = await identify('11111111-aaaa-4bbb-8ccc-1234567890ab', 'First Laptop');
   cookieA = a.cookie;
@@ -95,7 +100,7 @@ test('rich text is sanitised but tables and cell styling survive', async () => {
     '<p onclick="steal()">Hello <strong>world</strong></p>' +
     '<table><tbody><tr><td style="background-color:#fff3c4;text-align:center;font-weight:700" data-cell-style=\'{"bold":true}\'>A1</td></tr></tbody></table>' +
     '<script>alert(1)</script><img src="javascript:alert(1)">';
-  const ack = await emitAck(socket, 'message:send', { body: html, attachmentIds: [] });
+  const ack = await send(socket, { body: html, attachmentIds: [] });
   assert.equal(ack.ok, true);
   const body = ack.messages[0].body;
   assert.ok(body.includes('<table>'), 'table kept');
@@ -111,7 +116,7 @@ test('a message reaches every connected device instantly', async () => {
   const second = await connect(cookieB);
 
   const received = new Promise((resolve) => second.socket.once('message:new', resolve));
-  const ack = await emitAck(a.socket, 'message:send', { body: '<p>broadcast me</p>' });
+  const ack = await send(a.socket, { body: '<p>broadcast me</p>' });
   assert.equal(ack.ok, true);
   const message = await received;
   assert.equal(message.authorId, '11111111-aaaa-4bbb-8ccc-1234567890ab');
@@ -137,7 +142,7 @@ test('images upload locally, are signed, and arrive as their own messages', asyn
   assert.equal(attachments.length, 1);
   assert.match(attachments[0].id, /^[0-9a-f-]{36}$/);
 
-  const ack = await emitAck(socket, 'message:send', {
+  const ack = await send(socket, {
     body: '<p>look at this</p>',
     attachmentIds: [attachments[0].id],
   });
@@ -168,7 +173,7 @@ test('non-image uploads are rejected', async () => {
 test('only the author can delete a message; deletion broadcasts to everyone', async () => {
   const a = await connect(cookieA);
   const b = await connect(cookieB);
-  const ack = await emitAck(a.socket, 'message:send', { body: '<p>delete me</p>', attachmentIds: [] });
+  const ack = await send(a.socket, { body: '<p>delete me</p>', attachmentIds: [] });
   const id = ack.messages[0].id;
 
   const forbidden = await emitAck(b.socket, 'message:delete', { id });
@@ -208,7 +213,7 @@ test('history is paginated and ordered', async () => {
 
 test('empty messages are refused', async () => {
   const a = await connect(cookieA);
-  const ack = await emitAck(a.socket, 'message:send', { body: '<p>   </p>', attachmentIds: [] });
+  const ack = await send(a.socket, { body: '<p>   </p>', attachmentIds: [] });
   assert.equal(ack.ok, false);
 });
 
@@ -241,4 +246,71 @@ test('a signed-out session cannot fetch history', async () => {
     headers: { Cookie: 'lm_session=garbage' },
   });
   assert.equal(response.status, 401);
+});
+
+/* ------------------------------------------------------ send password gate */
+
+test('messages cannot be sent without the password', async () => {
+  const { socket } = await connect(cookieA);
+  const before = (await (await fetch(`${baseUrl}/api/messages?limit=1`, { headers: { Cookie: cookieA } })).json()).messages;
+
+  const missing = await emitAck(socket, 'message:send', { body: '<p>no password</p>' });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.status, 403);
+  assert.match(missing.error, /password/i);
+
+  const wrong = await emitAck(socket, 'message:send', { body: '<p>wrong password</p>', password: 'not-it' });
+  assert.equal(wrong.ok, false);
+  assert.equal(wrong.status, 403);
+
+  const after = (await (await fetch(`${baseUrl}/api/messages?limit=1`, { headers: { Cookie: cookieA } })).json()).messages;
+  assert.deepEqual(after, before, 'nothing was stored');
+});
+
+test('a rejected password does not link uploaded images to a message', async () => {
+  const { socket } = await connect(cookieA);
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const form = new FormData();
+  form.append('images', new Blob([png], { type: 'image/png' }), 'gate.png');
+  const upload = await fetch(`${baseUrl}/api/uploads`, { method: 'POST', headers: { Cookie: cookieA }, body: form });
+  const { attachments } = await upload.json();
+  const count = (await (await fetch(`${baseUrl}/api/messages?limit=300`, { headers: { Cookie: cookieA } })).json()).messages.length;
+
+  const rejected = await emitAck(socket, 'message:send', {
+    body: '<p>with image</p>',
+    attachmentIds: [attachments[0].id],
+    password: 'nope',
+  });
+  assert.equal(rejected.ok, false);
+
+  const later = await fetch(`${baseUrl}/api/messages?limit=300`, { headers: { Cookie: cookieA } });
+  assert.equal((await later.json()).messages.length, count, 'no message rows created');
+
+  // The correct password still works with the same upload.
+  const accepted = await emitAck(socket, 'message:send', {
+    body: '<p>with image</p>',
+    attachmentIds: [attachments[0].id],
+    password: PASSWORD,
+  });
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.messages.length, 2, 'text + image');
+});
+
+test('the REST fallback enforces the password too', async () => {
+  const wrong = await fetch(`${baseUrl}/api/messages`, {
+    method: 'POST',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '<p>rest</p>', password: 'wrong' }),
+  });
+  assert.equal(wrong.status, 403);
+
+  const ok = await fetch(`${baseUrl}/api/messages`, {
+    method: 'POST',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: '<p>rest ok</p>', password: PASSWORD }),
+  });
+  assert.equal(ok.status, 201);
 });

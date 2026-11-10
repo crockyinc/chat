@@ -328,6 +328,34 @@
       </div>
     </div>
 
+    <!-- Send password -->
+    <div id="passwordModal" class="fixed inset-0 z-[68] hidden place-items-center bg-black/50 p-4 backdrop-blur-sm"
+      role="dialog" aria-modal="true" aria-labelledby="passwordHeading">
+      <div class="card w-full max-w-sm p-5">
+        <div class="mb-3 flex items-center gap-2.5">
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-500 dark:bg-brand-500/15">
+            <i data-icon="lock" data-size="17"></i>
+          </span>
+          <h2 id="passwordHeading" class="text-base font-bold leading-tight">Password required</h2>
+        </div>
+        <p id="passwordMessage" class="mb-3 text-xs leading-relaxed muted">
+          Enter the password to send this message.
+        </p>
+        <form id="passwordForm" autocomplete="off">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Password</span>
+            <input id="passwordInput" class="field" type="password" autocomplete="off" aria-describedby="passwordError" />
+          </label>
+          <p id="passwordError" class="mt-2 hidden rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:bg-red-500/10"></p>
+          <div class="mt-4 flex justify-end gap-2">
+            <button type="button" class="btn-ghost" id="passwordCancel">Cancel</button>
+            <button type="submit" class="btn-primary">Unlock &amp; send</button>
+          </div>
+        </form>
+        <p class="mt-3 text-center text-[10.5px] muted">Checked by the server — a wrong password sends nothing.</p>
+      </div>
+    </div>
+
     <!-- Lightbox -->
     <div id="lightbox" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/85 p-4">
       <img id="lightboxImage" class="max-h-full max-w-full rounded-lg object-contain" alt="" />

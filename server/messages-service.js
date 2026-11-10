@@ -1,4 +1,4 @@
-import { sanitizeRichText, sanitizePlainText } from './security.js';
+import { sanitizeRichText, sanitizePlainText, verifySendPassword } from './security.js';
 import { config } from './config.js';
 import { serializeMessage } from './routes/messages.js';
 
@@ -17,6 +17,15 @@ export class MessageError extends Error {
  * uploaded first (so clients cannot point at arbitrary paths).
  */
 export function normalizePayload(payload, { db, restoreAttachment }) {
+  // Sending is password protected: check before touching any content so a
+  // rejected message leaves no trace (and images are never linked to it).
+  if (!verifySendPassword(payload?.password)) {
+    throw new MessageError(
+      payload?.password ? 'Incorrect password' : 'Password required to send',
+      403,
+    );
+  }
+
   const body = sanitizeRichText(payload?.body || '');
   const rawIds = Array.isArray(payload?.attachmentIds) ? payload.attachmentIds : [];
   const ids = [...new Set(rawIds.filter((id) => typeof id === 'string'))].slice(0, MAX_ATTACHMENTS_PER_MESSAGE);

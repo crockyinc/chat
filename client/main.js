@@ -308,7 +308,11 @@ function startChat() {
       const body = payload.html;
       const text = body.replace(/<[^>]+>/g, '').trim();
       if (!text && !payload.attachmentIds.length) return;
-      await socket.call('message:send', { body, attachmentIds: payload.attachmentIds });
+      await socket.call('message:send', {
+        body,
+        attachmentIds: payload.attachmentIds,
+        password: payload.password,
+      });
       chatView.scrollToBottom('smooth');
     },
   });
@@ -334,9 +338,9 @@ function startChat() {
     onChange: (html) => composer?.setContent(html, { focus: false }),
     onUpload: (files) => api.upload(files),
     onToast: toast,
-    onSend: async (html) => {
+    onSend: async (html, password) => {
       if (!socket?.connected) throw new Error('Not connected to the server');
-      await socket.call('message:send', { body: html, attachmentIds: [] });
+      await socket.call('message:send', { body: html, attachmentIds: [], password });
       composer?.clear();
       chatView.scrollToBottom('smooth');
     },
@@ -633,6 +637,12 @@ function bindGlobalUi() {
   els.profileName?.addEventListener('input', () => {
     if (els.profileNamePreview) els.profileNamePreview.textContent = els.profileName.value.trim() || 'No display name';
     if (els.profileAvatar) els.profileAvatar.textContent = initialsFor(els.profileName.value, deviceId);
+  });
+
+  $('passwordCancel')?.addEventListener('click', () => {
+    // Route through the dialog's own close handler so the promise resolves null.
+    const modal = document.getElementById('passwordModal');
+    modal?._onClose?.();
   });
 
   els.lightbox?.addEventListener('click', (event) => {

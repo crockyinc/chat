@@ -4,6 +4,7 @@ import { icon, mountIcons } from './icons.js';
 import { formatBytes } from './messages.js';
 import { readFileAsDataUrl } from '../editor/clipboard.js';
 import { insertMatrix, focusFirstCell } from '../editor/extensions/SpreadsheetPaste.js';
+import { sendWithPasswordPrompt } from './passwordPrompt.js';
 
 const DRAFT_KEY = 'lm.draft';
 const MAX_ATTACHMENTS = 6;
@@ -190,39 +191,64 @@ export function createComposer({ onSend, onTyping, onUpload, editorElement, tool
     if (focus) editor.commands.focus('end');
   }
 
+  /** Uploads attachments once, so a password retry never re-uploads them. */
+  let uploadedCache = null;
+  async function ensureUploads() {
+    if (!attachments.length) return [];
+    if (uploadedCache) return uploadedCache;
+    const result = await onUpload(attachments.map((a) => a.file));
+    uploadedCache = (result.attachments || []).map((a) => a.id);
+    return uploadedCache;
+  }
+
   async function send() {
     if (busy) return;
     const html = editor.isEmpty ? '' : editor.getHTML();
     if (!html && !attachments.length) return;
 
-    busy = true;
-    if (sendButton) {
-      sendButton.disabled = true;
-      sendButton.innerHTML = `<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>`;
-    }
-
+    // The password prompt wraps the *whole* send, so a wrong password comes
+    // back from the server (403) and the dialog asks again — the draft and any
+    // uploaded images are reused instead of being thrown away.
+    let result;
     try {
-      let uploaded = [];
-      if (attachments.length) {
-        const result = await onUpload(attachments.map((a) => a.file));
-        uploaded = result.attachments || [];
-      }
-      await onSend?.({ type: 'message', html, attachmentIds: uploaded.map((a) => a.id) });
-      // Clear only after a confirmed send.
-      editor.commands.clearContent(false);
-      attachments.length = 0;
-      renderTray();
-      clearDraftStorage();
-      refreshSendState();
-      onTyping?.(false);
-      editor.commands.focus();
+      result = await sendWithPasswordPrompt(async (password) => {
+        busy = true;
+        setSending(true);
+        try {
+          const attachmentIds = await ensureUploads();
+          await onSend?.({ type: 'message', html, attachmentIds, password });
+        } finally {
+          busy = false;
+          setSending(false);
+        }
+      });
     } catch (err) {
       onSend?.({ type: 'toast', message: err.message || 'Could not send', tone: 'error' });
-    } finally {
-      busy = false;
-      if (sendButton) sendButton.innerHTML = '<span>Send</span>' + icon('send', { size: 16 });
-      refreshSendState();
+      return;
     }
+
+    if (!result.sent) {
+      // Cancelled or too many wrong attempts: keep everything as it was.
+      refreshSendState();
+      return;
+    }
+
+    editor.commands.clearContent(false);
+    attachments.length = 0;
+    uploadedCache = null;
+    renderTray();
+    clearDraftStorage();
+    refreshSendState();
+    onTyping?.(false);
+    editor.commands.focus();
+  }
+
+  function setSending(isSending) {
+    if (!sendButton) return;
+    sendButton.disabled = isSending;
+    sendButton.innerHTML = isSending
+      ? `<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>`
+      : '<span>Send</span>' + icon('send', { size: 16 });
   }
 
   /* ---------------------------------------------------------------- events */
