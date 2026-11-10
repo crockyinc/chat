@@ -7,11 +7,49 @@
 > | --- | --- | --- |
 > | **Worker** (Workers Builds / `wrangler deploy`) | Git integration runs one `wrangler deploy`; a `[build]` command runs first | `wrangler.toml` → `[build]` + `[assets]` |
 > | **Pages** (`wrangler pages deploy`, or a Pages project from Git) | Dashboard build command, or `npm run pages:deploy` locally | Dashboard settings (§3) — `pages_build_output_dir` must **not** be in `wrangler.toml` |
->
-> If your failing check is named **"Workers Builds: &lt;project&gt;"**, you have a Worker project, not a
-> Pages project — jump to **§1a**. The `[ERROR] … static files` message in §1 is the Pages variant.
 
-## Deploying on Cloudflare Pages
+## 0. Read the error string — it names the target
+
+Each failure mode maps to exactly one target and one fix. Match your log line here before changing
+anything:
+
+| Log line | Target | Cause | Fix |
+| --- | --- | --- | --- |
+| `Could not detect a directory containing static files (e.g. html, css and js) for the project` | **Workers** (Git-integrated build, autoconfig) | The commit being built has **no Wrangler config and no `index.html`** — autoconfig scans the repo, finds neither, and gives up | Make sure the deploy branch actually contains the app: `[build]` + `[assets]` in `wrangler.toml`, or an `index.html` in the repo. See §0a. |
+| `Missing entry-point to Worker script or to assets directory` | **Workers** | A `wrangler.toml` exists but has no `[assets]` and no `main` (for example it only has `pages_build_output_dir`, which `wrangler deploy` ignores) | §1a |
+| `Must specify a directory of assets to deploy` | **Pages** (`wrangler pages deploy`) | No `<directory>` argument and no `pages_build_output_dir` | §2 — pass `dist`, or set it in the dashboard |
+
+> Note the first two say *Worker*, not Pages, even though the words "static files" sound like Pages.
+> Never file the first error under the Pages instructions: Pages would have said
+> `Must specify a directory of assets to deploy` instead.
+
+### 0a. "Could not detect a directory…" on the deploy branch
+
+This one is almost always a **wrong-branch or empty-branch deploy**, not a build-setting problem.
+Wrangler's autoconfig runs `findAssetsDir()`: it looks for `index.html` in the project root, then one
+level down, and it only considers `wrangler.json` / `wrangler.jsonc` / `wrangler.toml` at that same
+root. Nothing found → that error, before any of your Cloudflare settings are even consulted.
+
+So confirm what the deployed commit actually contains:
+
+```bash
+git ls-tree -r --name-only origin/main      # the branch the project builds
+```
+
+A healthy result lists the app (`package.json`, `public/index.html`, `wrangler.toml`, `server/`…).
+If it prints only `README.md`, the Cloudflare project is building a branch that does not have the
+code yet, and no Cloudflare setting can fix it — the commits have to reach that branch first.
+
+Private repository? Cloudflare needs GitHub App access to it (Workers &amp; Pages → your project →
+**Settings → Build → Git repository**); without access it builds whatever it can see, or reruns an old
+commit. Public repository: just confirm the branch name matches.
+
+Reproduce the failure locally without Cloudflare, on any branch:
+
+```bash
+git clone --branch main <repo> /tmp/probe && cd /tmp/probe
+wrangler deploy --dry-run     # prints the same error if the branch has no app
+```
 
 ## Read this first: what Pages can and cannot run
 
@@ -223,6 +261,9 @@ or WebSockets in a Worker, D1 for storage and R2 (or KV) for images. It is a rew
 
 ## 6. Checklist
 
+- [ ] `git ls-tree -r --name-only origin/<deploy-branch>` lists the app, not just `README.md`
+- [ ] Cloudflare has GitHub access to the repo, and the project's **production branch** is the branch
+      that actually contains the code
 - [ ] `npm run build:pages` produces `dist/index.html`, `dist/css/app.css`, `dist/js/app.js`
 - [ ] Pages build command is `npm run build:pages`, output directory is `dist`
 - [ ] `dist/index.html` references `./css/…` and `./js/…` (relative), not `/css/…`
