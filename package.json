@@ -20,7 +20,8 @@
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "test": "node --test --test-force-exit tests/server.test.js",
     "test:ui": "npm run build && node --test --test-force-exit --experimental-import-meta-resolve tests/ui.test.js",
-    "verify": "npm test && npm run test:ui"
+    "verify": "npm test && npm run test:ui && npm run test:static",
+    "test:static": "npm run build:pages && node --test --test-force-exit tests/ui-static.test.js"
   },
   "dependencies": {
     "@tiptap/core": "^3.33.1",

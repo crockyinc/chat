@@ -192,6 +192,48 @@ image is older.
 What went wrong in your log is exactly the missing build command: Wrangler ran with no directory of
 assets. Adding `npm run build:pages` + `dist` removes the error.
 
+## 3a. "Request failed (405)" on the join screen — what it means
+
+If the deployed page shows the join screen but pressing **Enter chat** fails with
+`Request failed (405)`, the UI is being served by the static host while the API calls are landing on
+that same static host. A static server only serves files:
+
+| Request | Static host answers | The app needs |
+| --- | --- | --- |
+| `GET /api/health` | `404`/`405` (Workers assets) or `index.html` (SPA fallback) | JSON `{ ok: true }` |
+| `POST /api/auth/identify` | `405 Method Not Allowed` | a session cookie + device row |
+| `POST /api/messages` | `405 Method Not Allowed` | SQLite write + broadcast |
+
+Nothing is wrong with the deployment — there is simply no chat API in it. Pages/Workers cannot run
+Express, Socket.io, `node:sqlite` or `uploads/`.
+
+The client now detects this at boot (`client/lib/backendCheck.js` probes `/api/health`) and says so
+instead of leaking a status code:
+
+* red banner — *"This page is being served by a static host, which has no chat API behind it."*
+* amber hint — how to fix it (`?backend=http://<server-ip>:3000`, or run `npm start`)
+* **Enter chat** is disabled until a real backend answers, and pressing it re-probes, so starting the
+  server and trying again works without a reload
+* wrong `?backend=` values are reported, and the address being used is shown under the button
+
+### Fix it in one of two ways
+
+1. **Just deploy the Node app** (simplest — everything works):
+   ```bash
+   npm ci && npm start      # http://<lan-ip>:3000
+   ```
+2. **Keep the UI static and point it at a backend** — either
+   * add `?backend=http://<server-ip>:3000` to the site URL once (remembered in `localStorage`), or
+   * bake it into the build so visitors never see the banner:
+     ```bash
+     LAN_CHAT_BACKEND=http://192.168.1.24:3000 npm run build:pages
+     ```
+     (set it as a build environment variable in the Cloudflare dashboard and it applies to every
+     deployment). Then allow the static origin on the backend: `ALLOWED_ORIGINS=…`,
+     `COOKIE_SAMESITE=none` over HTTPS — see §4.
+
+> The same banner appears for GitHub Pages, `python -m http.server`, or any other static file server.
+
 ## 4. Hybrid: Pages UI + Node backend
 
 The client can talk to a backend on another origin. Configure it in one of three ways:
@@ -270,4 +312,6 @@ or WebSockets in a Worker, D1 for storage and R2 (or KV) for images. It is a rew
 - [ ] For hybrid: `ALLOWED_ORIGINS` on the backend lists the exact Pages origin(s), including
       preview deployments, and `COOKIE_SAMESITE=none` is set with HTTPS
 - [ ] Open the deployed URL: the UI renders and the join screen appears
+- [ ] Pressing **Enter chat** either joins, or explains that a static host has no API (it must not
+      show a bare `Request failed (405)`)
 - [ ] For hybrid: joining succeeds and a message sent from one tab appears in another

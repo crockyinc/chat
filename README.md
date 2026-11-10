@@ -55,11 +55,12 @@ Excel-styled table and an image.
 ### Development
 
 ```bash
-npm run dev      # esbuild + Tailwind watch mode, server restarts on change
-npm test         # server integration tests (16)
-npm run test:ui  # browser-level tests with jsdom (13)
-npm run verify   # both suites
-npm run build    # production bundle
+npm run dev          # esbuild + Tailwind watch mode, server restarts on change
+npm test             # server integration tests (16)
+npm run test:ui      # browser-level tests with jsdom (13)
+npm run test:static  # static-host / no-backend diagnosis tests (5)
+npm run verify       # all three suites
+npm run build        # production bundle
 ```
 
 ### Deploying the UI to Cloudflare
@@ -224,14 +225,19 @@ Delete the database and the uploads folder to start from scratch.
 ## 4. Tests
 
 ```
-npm test        # 16 server tests: identity, sanitisation, broadcast, uploads/signing,
-                # upload rejection, delete permissions, presence, pagination, export, auth,
-                # and the send-password gate (missing / wrong / correct, REST + socket)
-npm run test:ui # 13 browser tests (jsdom): boots the real bundle against a real server,
-                # joins, receives live messages, renders Excel tables, formats,
-                # spreadsheet header selection + cell styling + real Excel paste, and the
-                # password prompt (opens on Send, wrong password rejected, cancel keeps the
-                # draft, correct password sends)
+npm test             # 16 server tests: identity, sanitisation, broadcast, uploads/signing,
+                     # upload rejection, delete permissions, presence, pagination, export, auth,
+                     # and the send-password gate (missing / wrong / correct, REST + socket)
+npm run test:ui      # 13 browser tests (jsdom): boots the real bundle against a real server,
+                     # joins, receives live messages, renders Excel tables, formats,
+                     # spreadsheet header selection + cell styling + real Excel paste, and the
+                     # password prompt (opens on Send, wrong password rejected, cancel keeps the
+                     # draft, correct password sends)
+npm run test:static  # 5 deployment tests: boots the real Pages bundle against a fake static
+                     # host (405 mode and SPA-fallback mode) and asserts the join screen explains
+                     # "no chat API here" with a fix, instead of showing "Request failed (405)"
+
+npm run verify       # all three suites
 ```
 
 ---
@@ -245,5 +251,6 @@ npm run test:ui # 13 browser tests (jsdom): boots the real bundle against a real
 | "Link expired — reload the chat" on an image | Signed URLs are time limited; a reload re-signs the current messages. |
 | Tables look cramped on a phone | Rotate to landscape or use the full-screen editor (expand icon) — wide tables scroll horizontally. |
 | Port already in use | `PORT=3001 npm start`. |
+| Join screen says "Request failed (405)" | The page is on a static host with no chat API behind it (Cloudflare Pages/Workers assets, GitHub Pages). Run the Node server and reopen with `?backend=http://<server-ip>:3000`, or bake it in: `LAN_CHAT_BACKEND=http://<server-ip>:3000 npm run build:pages`. See `docs/DEPLOY-CLOUDFLARE.md` §3a. |
 | Cloudflare build fails with `Could not detect a directory containing static files` | Wrangler autoconfig runs on the **deployed branch**. That branch has no `wrangler.toml` and no `index.html` — usually because the Cloudflare project builds a branch without the code (e.g. `main` holds only `README.md`). Check with `git ls-tree -r --name-only origin/main`, then point the project at the branch that has the app. Not a build-command problem: see `docs/DEPLOY-CLOUDFLARE.md` §0. |
 | Cloudflare build fails with `Missing entry-point to Worker script or to assets directory` | That is a **Worker** build reading a config without `[assets]`. The committed `wrangler.toml` has `[build]` + `[assets]`; see `docs/DEPLOY-CLOUDFLARE.md` §1a. Note the static shell only — the realtime backend still needs Node. |

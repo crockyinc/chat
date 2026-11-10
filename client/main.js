@@ -15,6 +15,7 @@ import {
 import { mountIcons, icon } from './ui/icons.js';
 import { createToolbar, setToastHandler } from './editor/toolbar.js';
 import { isRemoteBackend } from './lib/backend.js';
+import { probeBackend, explainApiError, backendLabel } from './lib/backendCheck.js';
 import { createChatView } from './ui/chatView.js';
 import { createComposer } from './ui/composer.js';
 import { createEditorModal } from './ui/editorModal.js';
@@ -55,6 +56,9 @@ const els = {
   joinPassword: $('joinPassword'),
   passwordWrap: $('passwordWrap'),
   joinError: $('joinError'),
+  joinHint: $('joinHint'),
+  joinSubmit: $('joinSubmit'),
+  backendNote: $('backendNote'),
   profileModal: $('profileModal'),
   profileForm: $('profileForm'),
   profileName: $('profileName'),
@@ -141,8 +145,11 @@ async function loadRoom() {
       els.passwordWrap?.removeAttribute('hidden');
     }
     return room;
-  } catch {
-    toast('Cannot reach the server', 'error');
+  } catch (err) {
+    const explained = explainApiError(err, backendProbe);
+    els.joinError.textContent = explained.message;
+    els.joinError.classList.remove('hidden');
+    setJoinEnabled(false, explained);
     return null;
   }
 }
@@ -158,11 +165,57 @@ async function identify({ displayName, password }) {
   renderIdentity();
 }
 
+/**
+ * Cached result of "is there a real chat server behind this page?".
+ * Set once during boot, reused to explain API errors afterwards.
+ */
+let backendProbe = null;
+
+/**
+ * Greys out "Enter chat" and shows a fixable message when the page is being
+ * served by a static host. Without this the only symptom is "Request failed
+ * (405)", which looks like the app is broken rather than undeployed.
+ */
+/**
+ * When the UI is static and the API lives on another origin, say where.
+ * Rendered as soon as it is known, not only when the join modal opens, so it is
+ * visible alongside a backend error.
+ */
+function renderBackendNote() {
+  if (!isRemoteBackend() || !els.backendNote) return;
+  els.backendNote.textContent = `Server: ${backendLabel()}`;
+  els.backendNote.classList.remove('hidden');
+}
+
+function setJoinEnabled(enabled, explained) {
+  if (els.joinSubmit) {
+    els.joinSubmit.disabled = !enabled;
+    els.joinSubmit.classList.toggle('opacity-50', !enabled);
+    els.joinSubmit.classList.toggle('cursor-not-allowed', !enabled);
+  }
+  if (els.joinHint) {
+    els.joinHint.textContent = explained?.hint || '';
+    els.joinHint.classList.toggle('hidden', !explained?.hint);
+  }
+}
+
 async function boot() {
   applyTheme(getTheme());
   mountIcons(document);
   renderIdentity();
   bindGlobalUi();
+
+  backendProbe = await probeBackend();
+  if (backendProbe.state !== 'ok') {
+    const explained = explainApiError(
+      { message: 'Request failed (405)', status: backendProbe.state === 'unreachable' ? 0 : 405 },
+      backendProbe,
+    );
+    els.joinError.textContent = explained.message;
+    els.joinError.classList.remove('hidden');
+    setJoinEnabled(false, explained);
+    renderBackendNote();
+  }
 
   const room = await loadRoom();
 
@@ -190,20 +243,42 @@ function openJoin(room) {
   els.joinName.value = getDisplayName();
   els.joinSerial.value = deviceId;
   if (room?.requiresPassword) els.passwordWrap.removeAttribute('hidden');
+  renderBackendNote();
   setTimeout(() => els.joinName.focus(), 100);
 }
 
 els.joinForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   els.joinError.classList.add('hidden');
+  els.joinHint?.classList.add('hidden');
+
+  // Re-check only when the page is known to be without a backend, so a server
+  // started after the page loaded can be picked up without a reload.
+  if (backendProbe && backendProbe.state !== 'ok') {
+    backendProbe = await probeBackend();
+    if (backendProbe.state !== 'ok') {
+      const explained = explainApiError({ status: 405, message: 'Request failed (405)' }, backendProbe);
+      els.joinError.textContent = explained.message;
+      els.joinError.classList.remove('hidden');
+      setJoinEnabled(false, explained);
+      return;
+    }
+    setJoinEnabled(true, null);
+  }
+
   try {
     await identify({ displayName: els.joinName.value, password: els.joinPassword.value });
     els.joinModal.classList.add('hidden');
     els.joinModal.classList.remove('grid');
     startChat();
   } catch (err) {
-    els.joinError.textContent = err.message || 'Could not join';
+    const explained = explainApiError(err, backendProbe);
+    els.joinError.textContent = explained.message || 'Could not join';
     els.joinError.classList.remove('hidden');
+    if (explained.hint) {
+      els.joinHint.textContent = explained.hint;
+      els.joinHint.classList.remove('hidden');
+    }
   }
 });
 

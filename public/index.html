@@ -174,7 +174,9 @@
             <input id="joinPassword" class="field" type="password" autocomplete="current-password" placeholder="Required by this server" />
           </label>
           <p id="joinError" class="hidden rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:bg-red-500/10"></p>
-          <button class="btn-primary w-full !py-2.5" type="submit">Enter chat</button>
+          <p id="joinHint" class="hidden rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"></p>
+          <button id="joinSubmit" class="btn-primary w-full !py-2.5 disabled:opacity-50" type="submit">Enter chat</button>
+          <p id="backendNote" class="hidden break-all text-center text-[11px] muted"></p>
           <p class="text-center text-[11px] muted">Everything stays on this machine and its LAN.</p>
         </form>
       </div>

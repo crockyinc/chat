@@ -36,6 +36,12 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
   if (!response.ok) {
     throw new ApiError(payload?.error || `Request failed (${response.status})`, response.status, payload);
   }
+  if (!isJson) {
+    // A static host answers unknown paths with index.html and a 200. That is not
+    // our API; returning null here would surface as a confusing TypeError
+    // ("reading 'name'") instead of "there is no backend here".
+    throw new ApiError('The server returned a page instead of data — there is no chat API here.', 200, null);
+  }
   return payload;
 }
 

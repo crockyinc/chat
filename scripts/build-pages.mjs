@@ -33,11 +33,24 @@ async function main() {
 
   // 1. Index shell: rewrite absolute asset paths so the app is relocatable.
   const indexHtml = await readFile(path.join(ROOT, 'public/index.html'), 'utf8');
-  const relocatable = indexHtml
+  let relocatable = indexHtml
     .replace('href="/css/app.css"', 'href="./css/app.css"')
     .replace('src="/js/app.js"', 'src="./js/app.js"');
   if (relocatable === indexHtml) {
     throw new Error('Could not rewrite asset paths in public/index.html — did the asset tags change?');
+  }
+
+  // 1b. Optional backend hint: `LAN_CHAT_BACKEND=https://api.example.com npm run build:pages`
+  //     bakes the Node server's address into the static shell, so visitors do not
+  //     need a ?backend= query parameter and the join screen can never end up
+  //     posting to a static host by accident.
+  const backend = (process.env.LAN_CHAT_BACKEND || '').trim().replace(/\/+$/, '');
+  if (backend && !/^https?:\/\/[^/\s]+$/i.test(backend)) {
+    throw new Error(`LAN_CHAT_BACKEND must be an absolute http(s) URL, got "${backend}"`);
+  }
+  if (backend) {
+    const tag = `<script>window.LAN_CHAT_BACKEND = ${JSON.stringify(backend)};</script>\n    `;
+    relocatable = relocatable.replace('<script defer src="./js/app.js">', `${tag}<script defer src="./js/app.js">`);
   }
   await writeFile(path.join(DIST, 'index.html'), relocatable);
 
@@ -95,7 +108,11 @@ async function main() {
   console.log(`  index.html  ${(htmlSize / 1024).toFixed(1)} KB`);
   console.log(`  css/app.css ${(cssSize / 1024).toFixed(1)} KB`);
   console.log(`  js/app.js   ${(jsSize / 1024).toFixed(1)} KB`);
+  if (backend) {
+    console.log(`\n  Backend baked in: ${backend}`);
+  }
   console.log('\n  Static preview only — run `npm start` for the realtime backend.');
+  console.log('  Without a reachable backend the join screen explains how to point at one.');
 }
 
 main().catch((error) => {
