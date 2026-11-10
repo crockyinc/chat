@@ -79,7 +79,9 @@ export function explainApiError(err, probe = null) {
     return {
       kind: 'unreachable',
       message: 'Cannot reach the chat server.',
-      hint: hintFor(probe, 'Make sure the Node server is running on this machine (npm start), then reload.'),
+      hint: mixedContentOnHttps() && /^http:\/\//i.test(probe?.backend || '')
+        ? 'This page is on HTTPS but the configured backend is HTTP, so the browser blocks the request. Serve the backend over HTTPS, or run the app locally with npm start.'
+        : hintFor(probe, 'Make sure the Node server is running on this machine (npm start), then reload.'),
     };
   }
 
@@ -97,13 +99,15 @@ export function explainApiError(err, probe = null) {
   const noBackend = selfEvident || (probe && probe.state !== 'ok');
 
   if (staticHost && noBackend) {
+    const configured = probe?.backend || '';
     return {
       kind: 'no-backend',
       message: 'This page is being served by a static host, which has no chat API behind it.',
-      hint:
-        !probe || probe.state === 'unreachable'
-          ? `The backend could not be reached${probe.backend ? ` at ${probe.backend}` : ''}. Start the Node server (npm start) — a static host alone cannot store messages or images.`
-          : `Point the UI at your running Node server: append ?backend=http://<server-ip>:3000 to this URL, or run the app directly with npm start.`,
+      hint: configured
+        ? `No chat server answered at ${configured}. Start the Node server (npm start) and check that address is reachable from this device — a static host alone cannot store messages or images.`
+        : mixedContentOnHttps()
+          ? 'This page is on HTTPS, so it can only talk to an HTTPS backend (browsers block http:// requests from https:// pages). Expose your Node server over HTTPS and reopen this page with ?backend=https://your-server — or just run the app locally with npm start and use the LAN URL it prints.'
+          : 'Start the Node server on the machine that has your messages (npm start), then reopen this page with ?backend=http://<that-machine-ip>:3000 — the address it prints on startup, e.g. http://192.168.1.24:3000. Or skip the static host entirely and open that URL directly.',
     };
   }
 
@@ -112,6 +116,17 @@ export function explainApiError(err, probe = null) {
   }
 
   return { kind: 'error', message: raw, hint: '' };
+}
+
+/**
+ * True when the page is served over HTTPS but the backend is not.
+ *
+ * Browsers block `http://` requests from `https://` pages (mixed content), so a
+ * hint like "append ?backend=http://192.168.1.24:3000" is actively misleading on
+ * a Pages/Workers deployment — it cannot work until the backend has TLS.
+ */
+function mixedContentOnHttps() {
+  return typeof window !== 'undefined' && window.location?.protocol === 'https:';
 }
 
 function hintFor(probe, fallback) {

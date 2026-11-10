@@ -216,6 +216,21 @@ instead of leaking a status code:
   server and trying again works without a reload
 * wrong `?backend=` values are reported, and the address being used is shown under the button
 
+### Which solution is actually right for you?
+
+| You want… | Do this | Effort |
+| --- | --- | --- |
+| **To use the chat today**, on your LAN | `npm ci && npm start` on the machine with the messages, then open the `http://<lan-ip>:3000` URL it prints | 1 command |
+| The UI hosted on Cloudflare, backend on a LAN box, **same machine browsing** | Backend over HTTPS (a tunnel or a reverse proxy), then `ALLOWED_ORIGINS=https://<site>` + `COOKIE_SAMESITE=none`, and open the site with `?backend=https://<backend>` | ~15 min |
+| The UI hosted on Cloudflare for **other people on the internet** | Same as above, but the backend must be publicly reachable over HTTPS | real hosting |
+| Just a static preview of the design | Nothing — the banner is expected; there is no API to reach | 0 |
+
+**Important:** on an `https://` site the backend *must* also be `https://`. Browsers block
+`http://` requests from `https://` pages (mixed content), so `?backend=http://192.168.1.24:3000`
+cannot work from the Cloudflare URL — the join screen now says so instead of failing silently.
+Either put TLS in front of the Node server (Caddy, nginx, `tailscale serve`, a Cloudflare Tunnel)
+or browse the LAN URL directly.
+
 ### Fix it in one of two ways
 
 1. **Just deploy the Node app** (simplest — everything works):

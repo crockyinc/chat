@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
@@ -40,8 +41,12 @@ async function waitFor(predicate, { timeout = 8000, label = 'condition' } = {}) 
 /** A server that serves the static bundle and nothing else — no chat API. */
 function startStaticHost(mode) {
   const indexHtml = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
-  const css = fs.readFileSync(path.join(DIST, 'css/app.css'), 'utf8');
-  const js = fs.readFileSync(path.join(DIST, 'js/app.js'), 'utf8');
+  // Assets are content-hashed (app.<hash>.css/js); find them the way the HTML does.
+  const cssName = indexHtml.match(/href="\.\/css\/([^"]+)"/)?.[1];
+  const jsName = indexHtml.match(/src="\.\/js\/([^"]+)"/)?.[1];
+  assert.ok(cssName && jsName, 'index.html must reference hashed assets');
+  const css = fs.readFileSync(path.join(DIST, 'css', cssName), 'utf8');
+  const js = fs.readFileSync(path.join(DIST, 'js', jsName), 'utf8');
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -51,11 +56,11 @@ function startStaticHost(mode) {
       res.writeHead(405, { 'Content-Length': '0' });
       return res.end();
     }
-    if (url.pathname === '/css/app.css') {
-      res.writeHead(200, { 'Content-Type': 'text/css' });
+    if (url.pathname === `/css/${cssName}`) {
+      res.writeHead(200, { 'Content-Type': 'text/css', 'Cache-Control': 'public, max-age=31536000, immutable' });
       return res.end(css);
     }
-    if (url.pathname === '/js/app.js') {
+    if (url.pathname === `/js/${jsName}` || url.pathname === '/js/app.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       return res.end(js);
     }
@@ -197,11 +202,62 @@ test('a ?backend= pointing at the static host itself is reported, not silently j
 
 test('the built shell is relocatable and points nowhere until configured', () => {
   const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
-  assert.match(html, /href="\.\/css\/app\.css"/);
-  assert.match(html, /src="\.\/js\/app\.js"/);
-  assert.doesNotMatch(html, /href="\/css\/app\.css"/, 'no root-absolute asset paths');
+  assert.match(html, /href="\.\/css\/app\.[0-9a-f]{10}\.css"/, 'relative, hashed CSS');
+  assert.match(html, /src="\.\/js\/app\.[0-9a-f]{10}\.js"/, 'relative, hashed JS');
+  assert.doesNotMatch(html, /href="\/css\//, 'no root-absolute asset paths');
+  assert.doesNotMatch(html, /src="\/js\//, 'no root-absolute asset paths');
   // No backend baked in unless LAN_CHAT_BACKEND was set for the build.
   if (!process.env.LAN_CHAT_BACKEND) {
     assert.doesNotMatch(html, /LAN_CHAT_BACKEND/, 'no stale backend baked into the shell');
   }
+});
+
+/**
+ * A cached bundle is the *most likely* reason a user reports the same bug twice:
+ * the fix is deployed, but their browser keeps running last week's JavaScript.
+ * Hashing the filename is what makes that impossible — a new deploy is a new URL.
+ */
+test('asset filenames are content-hashed so a deploy cannot be served from cache', () => {
+  const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+  const jsName = html.match(/src="\.\/js\/([^"]+)"/)[1];
+  const js = fs.readFileSync(path.join(DIST, 'js', jsName), 'utf8');
+  const digest = crypto.createHash('sha256').update(js).digest('hex').slice(0, 10);
+  assert.ok(jsName.includes(digest), `filename ${jsName} must embed the content hash ${digest}`);
+});
+
+test('the HTML shell and the legacy /js/app.js alias are not cached implicitly', () => {
+  // Parse _headers into { path: { header: value } } — matching the raw text with
+  // regexes is how the first version of this test fooled itself ("/css/*" ends
+  // with "/*", so a naive pattern hits the wrong line).
+  const blocks = {};
+  let current = null;
+  for (const rawLine of fs.readFileSync(path.join(DIST, '_headers'), 'utf8').split('\n')) {
+    if (!rawLine.trim()) continue;
+    if (!/^\s/.test(rawLine) && rawLine.trim().startsWith('/')) {
+      current = rawLine.trim();
+      blocks[current] = {};
+      continue;
+    }
+    const colon = rawLine.indexOf(':');
+    if (current && colon > -1) {
+      blocks[current][rawLine.slice(0, colon).trim().toLowerCase()] = rawLine.slice(colon + 1).trim();
+    }
+  }
+
+  // Hashed assets: safe to cache forever. The rule is keyed on the hashed
+  // filename pattern, so it cannot accidentally cover the unhashed alias.
+  assert.match(blocks['/css/app.*.css']['cache-control'], /immutable/);
+  assert.match(blocks['/js/app.*.js']['cache-control'], /immutable/);
+
+  // The shell must always revalidate — otherwise a deploy is invisible for a year.
+  assert.match(blocks['/index.html']['cache-control'], /no-cache/);
+  assert.match(blocks['/']['cache-control'], /no-cache/, 'the "/" route serves the shell too');
+
+  // The transitional, unhashed alias must not be pinned for a year, and must not
+  // also inherit the immutable rule (that produced "immutable, no-cache").
+  assert.match(blocks['/js/app.js']['cache-control'], /no-cache/);
+  assert.doesNotMatch(blocks['/js/app.js']['cache-control'], /immutable/);
+
+  // Nothing may cache *everything* forever.
+  assert.doesNotMatch(blocks['/*']['cache-control'] || '', /immutable/);
 });
