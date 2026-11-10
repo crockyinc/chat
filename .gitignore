@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# local runtime data: the database, uploaded images and the install secret
+data/*
+!data/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# build output (regenerate with `npm run build`)
+public/css/app.css
+public/js/app.js
+public/js/app.js.map
+
+# editors / os
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Cloudflare Pages static bundle
+dist/
+
+# wrangler local state
+.wrangler/

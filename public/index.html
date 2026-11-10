@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a84ff" />
+    <meta name="description" content="Zero-cloud LAN messenger: rich text, spreadsheets and images, shared live across your local network." />
+    <title>LAN Messenger</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230a84ff'/%3E%3Cpath d='M9 11h14M9 16h10M9 21h7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app" class="flex h-[100dvh] w-full overflow-hidden">
+      <!-- ============================================================ SIDEBAR -->
+      <aside
+        id="sidebar"
+        class="z-30 flex h-full w-[300px] shrink-0 flex-col border-r surface max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:-translate-x-full max-lg:transition-transform max-lg:duration-200 max-lg:shadow-panel"
+        aria-label="Devices and room"
+      >
+        <div class="flex items-center gap-2 border-b px-4 py-3" style="border-color: var(--border)">
+          <div class="grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-white shadow-sm">
+            <i data-icon="zap" data-size="20"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <h1 id="roomName" class="truncate text-[15px] font-bold">LAN Chat</h1>
+            <p class="flex items-center gap-1.5 text-[11.5px] muted">
+              <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" id="connDot"></span>
+              <span id="connLabel">connecting…</span>
+            </p>
+          </div>
+          <button class="btn-icon" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+            <i data-icon="moon" data-size="18"></i>
+          </button>
+        </div>
+
+        <div class="px-3 pt-3">
+          <label class="relative block">
+            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 muted"><i data-icon="search" data-size="16"></i></span>
+            <input id="searchInput" class="field !rounded-full pl-9" type="search" placeholder="Search messages…" autocomplete="off" />
+          </label>
+        </div>
+
+        <!-- Me -->
+        <button
+          id="profileCard"
+          class="mx-3 mt-3 flex w-[calc(100%-1.5rem)] items-center gap-3 rounded-xl border p-3 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
+          style="border-color: var(--border)"
+        >
+          <span id="myAvatar" class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-bold text-white">Me</span>
+          <span class="min-w-0 flex-1">
+            <span id="myName" class="block truncate text-sm font-semibold">Set your name</span>
+            <span id="mySerial" class="block truncate text-[11px] muted font-mono"></span>
+          </span>
+          <span class="muted"><i data-icon="pencil" data-size="15"></i></span>
+        </button>
+
+        <div class="mt-4 flex items-center justify-between px-4 pb-1">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider muted">Devices</h2>
+          <span id="onlineCount" class="rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold muted dark:bg-white/10">0</span>
+        </div>
+        <nav id="deviceList" class="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-label="Online devices"></nav>
+
+        <div class="border-t p-3 text-[11.5px] muted" style="border-color: var(--border)">
+          <button id="infoButton" class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-black/5 dark:hover:bg-white/5">
+            <i data-icon="qr" data-size="16"></i>
+            <span class="flex-1">Invite another device</span>
+            <i data-icon="chevronDown" data-size="14"></i>
+          </button>
+          <button id="exportButton" class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-black/5 dark:hover:bg-white/5">
+            <i data-icon="download" data-size="16"></i>
+            <span class="flex-1">Export this chat</span>
+          </button>
+          <p class="mt-2 flex items-center gap-1.5 px-2 text-[10.5px] leading-relaxed">
+            <i data-icon="lock" data-size="12"></i> Local storage only — nothing leaves this network.
+          </p>
+        </div>
+      </aside>
+
+      <!-- mobile drawer backdrop -->
+      <div id="sidebarBackdrop" class="fixed inset-0 z-20 hidden bg-black/40 lg:hidden"></div>
+
+      <!-- ================================================================= MAIN -->
+      <main class="relative flex h-full min-w-0 flex-1 flex-col" style="background: var(--chat-bg)">
+        <!-- chat header -->
+        <header class="z-20 flex h-[60px] shrink-0 items-center gap-2 border-b px-3 sm:px-4 surface" style="border-color: var(--border)">
+          <button id="sidebarToggle" class="btn-icon lg:hidden" aria-label="Show devices"><i data-icon="menu" data-size="20"></i></button>
+          <div class="grid h-9 w-9 place-items-center rounded-full bg-brand-500 text-white"><i data-icon="users" data-size="18"></i></div>
+          <div class="min-w-0 flex-1">
+            <h2 id="headerTitle" class="truncate text-[15px] font-bold leading-tight">LAN Chat</h2>
+            <p id="headerSub" class="truncate text-[12px] muted leading-tight">connecting…</p>
+          </div>
+          <button id="infoButtonTop" class="btn-icon" title="Invite devices / connection info"><i data-icon="qr" data-size="18"></i></button>
+          <button id="jumpBottom" class="btn-icon hidden" title="Jump to latest"><i data-icon="arrowDown" data-size="18"></i></button>
+        </header>
+
+        <!-- messages -->
+        <div id="scrollArea" class="relative min-h-0 flex-1 overflow-y-auto">
+          <div id="messageList" class="mx-auto flex w-full max-w-[1000px] flex-col gap-0.5 py-4"></div>
+          <div id="emptyState" class="pointer-events-none absolute inset-0 hidden place-items-center">
+            <div class="pointer-events-auto mx-auto max-w-sm px-6 text-center">
+              <div class="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-brand-50 text-brand-500 dark:bg-brand-500/15"><i data-icon="zap" data-size="30"></i></div>
+              <h3 class="text-lg font-bold">Nothing here yet</h3>
+              <p class="mt-1 text-sm muted">Say hi, drop in an image, or paste a spreadsheet straight from Excel. Every device on this network sees it instantly.</p>
+            </div>
+          </div>
+          <div id="loadMoreWrap" class="hidden pb-3 text-center">
+            <button id="loadMore" class="rounded-full border px-4 py-1.5 text-xs font-semibold muted hover:bg-black/5 dark:hover:bg-white/5" style="border-color: var(--border)">Load earlier messages</button>
+          </div>
+        </div>
+
+        <!-- typing -->
+        <div id="typingBar" class="pointer-events-none absolute bottom-[118px] left-4 hidden items-center gap-2 text-[12px] muted" aria-live="polite">
+          <span class="flex items-center gap-0.5 rounded-full bg-[color:var(--bubble-in)] px-2 py-1 text-[color:var(--muted)]">
+            <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+          </span>
+          <span id="typingText"></span>
+        </div>
+
+        <!-- composer -->
+        <div class="shrink-0 border-t surface" style="border-color: var(--border)">
+          <div id="attachmentTray" class="mx-auto hidden w-full max-w-[1000px] gap-2 overflow-x-auto px-3 pt-3"></div>
+          <div class="mx-auto w-full max-w-[1000px] px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:px-4">
+            <div id="composer" class="relative rounded-2xl border transition" style="border-color: var(--border); background: var(--panel-bg)">
+              <div id="composerToolbar" class="flex items-center gap-0.5 overflow-x-auto border-b px-2 py-1.5" style="border-color: var(--border)"></div>
+              <div id="cellToolbarComposer" class="hidden flex-wrap items-center gap-0.5 border-b bg-brand-50/60 px-2 py-1 dark:bg-brand-500/10" style="border-color: var(--border)"></div>
+              <div class="editor-surface" id="composerEditor"></div>
+              <div class="flex items-center gap-1 px-2 pb-2">
+                <button id="attachButton" class="btn-icon" title="Attach images (Ctrl+V also works)"><i data-icon="image" data-size="20"></i></button>
+                <button id="emojiButton" class="btn-icon" title="Emoji"><i data-icon="emoji" data-size="20"></i></button>
+                <button id="tableButton" class="btn-icon" title="Insert spreadsheet table"><i data-icon="table" data-size="20"></i></button>
+                <button id="fullscreenButton" class="btn-icon" title="Open full editor (tables &amp; formatting)"><i data-icon="expand" data-size="18"></i></button>
+                <span class="ml-auto flex items-center gap-2">
+                  <span id="draftState" class="hidden text-[11px] muted sm:inline"></span>
+                  <button id="sendButton" class="flex h-9 items-center gap-1.5 rounded-full bg-brand-500 px-4 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40" disabled>
+                    <span>Send</span><i data-icon="send" data-size="16"></i>
+                  </button>
+                </span>
+              </div>
+              <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" multiple hidden />
+            </div>
+            <p class="mt-1.5 hidden text-center text-[10.5px] muted sm:block">
+              Enter sends · Shift+Enter newline · Ctrl+V pastes Excel tables and screenshots · Ctrl+B/I/U formats
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ============================================================== MODALS -->
+    <!-- Join -->
+    <div id="joinModal" class="fixed inset-0 z-50 hidden place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div class="card w-full max-w-md p-6">
+        <div class="mb-5 flex items-center gap-3">
+          <div class="grid h-12 w-12 place-items-center rounded-2xl bg-brand-500 text-white"><i data-icon="zap" data-size="24"></i></div>
+          <div>
+            <h2 class="text-lg font-bold leading-tight">Join the local chat</h2>
+            <p class="text-xs muted">No account, no cloud — your device ID is generated in this browser.</p>
+          </div>
+        </div>
+        <form id="joinForm" class="space-y-4">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Display name <span class="font-normal">(optional)</span></span>
+            <input id="joinName" class="field" maxlength="60" placeholder="John's MacBook" autocomplete="nickname" />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Device serial no.</span>
+            <div class="flex gap-2">
+              <input id="joinSerial" class="field font-mono text-xs" readonly />
+              <button type="button" id="copySerialJoin" class="btn-ghost shrink-0 border !py-2" style="border-color: var(--border)" title="Copy"><i data-icon="copy" data-size="15"></i></button>
+            </div>
+          </label>
+          <label id="passwordWrap" class="block" hidden>
+            <span class="mb-1 block text-xs font-semibold muted">Room password</span>
+            <input id="joinPassword" class="field" type="password" autocomplete="current-password" placeholder="Required by this server" />
+          </label>
+          <p id="joinError" class="hidden rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:bg-red-500/10"></p>
+          <button class="btn-primary w-full !py-2.5" type="submit">Enter chat</button>
+          <p class="text-center text-[11px] muted">Everything stays on this machine and its LAN.</p>
+        </form>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div id="profileModal" class="fixed inset-0 z-50 hidden place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div class="card w-full max-w-md p-6">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-bold">Your device</h2>
+          <button class="btn-icon" data-close="profileModal"><i data-icon="close" data-size="18"></i></button>
+        </div>
+        <div class="mb-4 flex items-center gap-3 rounded-xl border p-3" style="border-color: var(--border)">
+          <span id="profileAvatar" class="grid h-12 w-12 place-items-center rounded-full bg-brand-500 text-lg font-bold text-white">Me</span>
+          <div class="min-w-0">
+            <p id="profileNamePreview" class="truncate font-semibold">No display name</p>
+            <p class="text-[11px] muted">Visible to every device on this server</p>
+          </div>
+        </div>
+        <form id="profileForm" class="space-y-4">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Display name</span>
+            <input id="profileName" class="field" maxlength="60" placeholder="e.g. John's MacBook" />
+          </label>
+          <div class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Device serial no. (persistent)</span>
+            <div class="flex gap-2">
+              <input id="profileSerial" class="field font-mono text-xs" readonly />
+              <button type="button" id="copySerialProfile" class="btn-ghost shrink-0 border !py-2" style="border-color: var(--border)"><i data-icon="copy" data-size="15"></i></button>
+            </div>
+            <p class="mt-1 text-[11px] muted">Generated with crypto.randomUUID() and kept in this browser's localStorage.</p>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" data-close="profileModal">Cancel</button>
+            <button class="btn-primary" type="submit">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Connection info -->
+    <div id="infoModal" class="fixed inset-0 z-50 hidden place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div class="card w-full max-w-md p-6">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-bold">Invite a device</h2>
+          <button class="btn-icon" data-close="infoModal"><i data-icon="close" data-size="18"></i></button>
+        </div>
+        <div class="flex flex-col items-center gap-3 rounded-xl border p-4" style="border-color: var(--border)">
+          <img id="qrImage" alt="QR code for the chat URL" class="h-40 w-40 rounded-lg bg-white p-2" hidden />
+          <div class="w-full space-y-1" id="lanUrlList"></div>
+        </div>
+        <p class="mt-4 text-xs leading-relaxed muted">
+          Everyone on the same Wi-Fi/LAN can open one of these addresses. Messages, images and spreadsheets are stored in
+          SQLite on this machine only.
+        </p>
+        <div class="mt-4 flex justify-end">
+          <button class="btn-primary" data-close="infoModal">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full editor -->
+    <div id="editorModal" class="fixed inset-0 z-40 hidden flex-col bg-black/45 p-0 backdrop-blur-sm sm:p-6">
+      <div class="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden border bg-[color:var(--panel-bg)] sm:rounded-2xl" style="border-color: var(--border)">
+        <div class="flex items-center justify-between border-b px-4 py-2.5" style="border-color: var(--border)">
+          <div class="flex items-center gap-2">
+            <span class="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-500 dark:bg-brand-500/15"><i data-icon="fileText" data-size="17"></i></span>
+            <div>
+              <h2 class="text-sm font-bold leading-tight">Compose</h2>
+              <p class="text-[11px] muted leading-tight">Tables · Excel paste · images · rich text</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button id="editorModalClear" class="btn-ghost !text-xs" title="Clear the draft"><i data-icon="eraser" data-size="15"></i><span class="hidden sm:inline">Clear</span></button>
+            <button class="btn-icon" data-close="editorModal" title="Close"><i data-icon="close" data-size="20"></i></button>
+          </div>
+        </div>
+        <div id="editorModalToolbar" class="flex flex-wrap items-center gap-0.5 overflow-x-auto border-b bg-black/[0.015] px-2 py-1.5 dark:bg-white/5" style="border-color: var(--border)"></div>
+        <div id="tableToolbar" class="hidden flex-wrap items-center gap-0.5 border-b bg-brand-50/60 px-2 py-1.5 dark:bg-brand-500/10" style="border-color: var(--border)"></div>
+        <div id="cellToolbar" class="hidden flex-wrap items-center gap-0.5 border-b bg-emerald-50/60 px-2 py-1.5 dark:bg-emerald-500/10" style="border-color: var(--border)"></div>
+        <div class="editor-surface min-h-0 flex-1 overflow-y-auto" id="editorModalEditor"></div>
+        <div class="flex items-center justify-between gap-2 border-t px-3 py-2" style="border-color: var(--border)">
+          <p class="text-[11px] muted">Tip: select cells then paste with <kbd class="rounded border px-1">Ctrl</kbd>+<kbd class="rounded border px-1">V</kbd></p>
+          <div class="flex items-center gap-2">
+            <button class="btn-ghost" data-close="editorModal">Cancel</button>
+            <button id="editorModalSend" class="btn-primary"><span>Send</span><i data-icon="send" data-size="16"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table insert -->
+    <div id="tableModal" class="fixed inset-0 z-[60] hidden place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div class="card w-full max-w-sm p-5">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-bold">Insert table</h2>
+          <button class="btn-icon" data-close="tableModal"><i data-icon="close" data-size="18"></i></button>
+        </div>
+        <form id="tableForm" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold muted">Rows</span>
+              <input id="tableRows" class="field" type="number" min="1" max="60" value="4" />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold muted">Columns</span>
+              <input id="tableCols" class="field" type="number" min="1" max="20" value="4" />
+            </label>
+          </div>
+          <label class="flex items-center gap-2 text-xs font-semibold">
+            <input id="tableHeaderRow" type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-brand-500" />
+            First row is a header
+          </label>
+          <label class="flex items-center gap-2 text-xs font-semibold">
+            <input id="tableSizing" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-500" />
+            Size columns to fit the chat
+          </label>
+          <div class="rounded-lg bg-black/[0.03] p-2.5 text-[11px] leading-relaxed muted dark:bg-white/5">
+            You can paste tab-separated spreadsheet data directly into the editor — it becomes a real table, keeping text,
+            number formats and cell colours.
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" data-close="tableModal">Cancel</button>
+            <button class="btn-primary" type="submit">Insert</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Link -->
+    <div id="linkModal" class="fixed inset-0 z-[60] hidden place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div class="card w-full max-w-sm p-5">
+        <h2 class="mb-3 text-base font-bold">Add link</h2>
+        <form id="linkForm" class="space-y-3">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">URL</span>
+            <input id="linkUrl" class="field" type="text" placeholder="https://example.com" />
+          </label>
+          <label class="flex items-center gap-2 text-xs font-semibold">
+            <input id="linkNewTab" type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-brand-500" />
+            Open in a new tab
+          </label>
+          <div class="flex justify-between gap-2">
+            <button type="button" id="linkRemove" class="btn-ghost !text-red-500">Remove link</button>
+            <div class="flex gap-2">
+              <button type="button" class="btn-ghost" data-close="linkModal">Cancel</button>
+              <button class="btn-primary" type="submit">Apply</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Send password -->
+    <div id="passwordModal" class="fixed inset-0 z-[68] hidden place-items-center bg-black/50 p-4 backdrop-blur-sm"
+      role="dialog" aria-modal="true" aria-labelledby="passwordHeading">
+      <div class="card w-full max-w-sm p-5">
+        <div class="mb-3 flex items-center gap-2.5">
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-500 dark:bg-brand-500/15">
+            <i data-icon="lock" data-size="17"></i>
+          </span>
+          <h2 id="passwordHeading" class="text-base font-bold leading-tight">Password required</h2>
+        </div>
+        <p id="passwordMessage" class="mb-3 text-xs leading-relaxed muted">
+          Enter the password to send this message.
+        </p>
+        <form id="passwordForm" autocomplete="off">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold muted">Password</span>
+            <input id="passwordInput" class="field" type="password" autocomplete="off" aria-describedby="passwordError" />
+          </label>
+          <p id="passwordError" class="mt-2 hidden rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:bg-red-500/10"></p>
+          <div class="mt-4 flex justify-end gap-2">
+            <button type="button" class="btn-ghost" id="passwordCancel">Cancel</button>
+            <button type="submit" class="btn-primary">Unlock &amp; send</button>
+          </div>
+        </form>
+        <p class="mt-3 text-center text-[10.5px] muted">Checked by the server — a wrong password sends nothing.</p>
+      </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/85 p-4">
+      <img id="lightboxImage" class="max-h-full max-w-full rounded-lg object-contain" alt="" />
+      <button class="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25" data-close="lightbox"><i data-icon="close" data-size="22"></i></button>
+      <a id="lightboxDownload" class="absolute bottom-4 right-4 flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/25" download><i data-icon="download" data-size="16"></i>Save</a>
+    </div>
+
+    <!-- Emoji -->
+    <div id="emojiPicker" class="card fixed z-[65] hidden w-[300px] p-2"></div>
+
+    <!-- Toast -->
+    <div id="toasts" class="pointer-events-none fixed bottom-4 left-1/2 z-[80] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4"></div>
+
+    <script defer src="/js/app.js"></script>
+  </body>
+</html>
