@@ -1,9 +1,28 @@
-# Cloudflare Pages configuration
+# Cloudflare configuration — one file, two supported deploy targets.
 #
-# `npm run build:pages` writes a self-contained static bundle to ./dist.
-# Pages then uploads it as static assets — no Worker runtime, no SQLite, no
-# uploads directory. See docs/DEPLOY-CLOUDFLARE.md for the full picture and for
-# the hybrid setup that points this UI at a Node backend.
-name = "lan-messenger"
+# TARGET 1: Cloudflare Workers static assets (what the repo's Git integration
+#           builds today — the check run named "Workers Builds: chat").
+#           Workers Builds runs `[build].command` and then uploads `[assets].directory`.
+#
+# TARGET 2: Cloudflare Pages (`npm run pages:deploy`).
+#           `wrangler pages deploy dist` accepts this same file because it uses
+#           [build] + [assets]; only `pages_build_output_dir` is Pages-only and
+#           would conflict with the `[assets]` key above, so it is NOT set here.
+#           For a Pages project created from Git, set in the dashboard:
+#               Build command:      npm run build:pages
+#               Build output dir:   dist
+#
+# Either way this is a *static shell only*: Express, Socket.io, node:sqlite and
+# /uploads cannot run on Cloudflare. Point the shell at a Node backend with
+# ?backend=https://your-host (see docs/DEPLOY-CLOUDFLARE.md).
+name = "chat"
 compatibility_date = "2025-01-01"
-pages_build_output_dir = "./dist"
+
+[build]
+# Rebuild the static bundle before every deploy so `dist/` is never stale.
+command = "npm run build:pages"
+
+[assets]
+directory = "./dist"
+# Deep links / unknown paths fall back to the single-page app shell.
+not_found_handling = "single-page-application"

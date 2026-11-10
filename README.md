@@ -56,10 +56,19 @@ Excel-styled table and an image.
 
 ```bash
 npm run dev      # esbuild + Tailwind watch mode, server restarts on change
-npm test         # server integration tests (13)
-npm run test:ui  # browser-level tests with jsdom (10)
+npm test         # server integration tests (16)
+npm run test:ui  # browser-level tests with jsdom (13)
+npm run verify   # both suites
 npm run build    # production bundle
 ```
+
+### Deploying the UI to Cloudflare
+
+`npm run build:pages` writes a self-contained static bundle to `dist/` (UI shell only — the realtime
+backend always stays on Node). `wrangler.toml` is committed with `[build]` + `[assets]`, which both
+`wrangler deploy` (Workers static assets) and `wrangler pages deploy dist` accept. Full instructions,
+including the two different build errors and how to point the shell at your backend, are in
+[`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md).
 
 ### Configuration (all optional, via environment variables)
 
@@ -236,3 +245,5 @@ npm run test:ui # 13 browser tests (jsdom): boots the real bundle against a real
 | "Link expired — reload the chat" on an image | Signed URLs are time limited; a reload re-signs the current messages. |
 | Tables look cramped on a phone | Rotate to landscape or use the full-screen editor (expand icon) — wide tables scroll horizontally. |
 | Port already in use | `PORT=3001 npm start`. |
+| Cloudflare build fails with `Could not detect a directory containing static files` | That is a **Pages** build with no build command. Set build command `npm run build:pages` and output directory `dist`. |
+| Cloudflare build fails with `Missing entry-point to Worker script or to assets directory` | That is a **Worker** build reading a config without `[assets]`. The committed `wrangler.toml` has `[build]` + `[assets]`; see `docs/DEPLOY-CLOUDFLARE.md` §1a. Note the static shell only — the realtime backend still needs Node. |
